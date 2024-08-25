@@ -3,6 +3,7 @@ import datetime
 import plotly.graph_objects as go
 import streamlit as st
 
+@st.cache_data()
 def get_sugar_price_data():
     # Define the ticker symbol for sugar futures
     ticker = "SB=F"
@@ -12,7 +13,7 @@ def get_sugar_price_data():
     start_date = end_date - datetime.timedelta(days=90)
 
     # Download historical data for sugar prices
-    sugar_data = yf.download(ticker, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
+    sugar_data = yf.download(ticker, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'), progress=False)
 
     # Create an interactive plot with Plotly
     fig = go.Figure()
