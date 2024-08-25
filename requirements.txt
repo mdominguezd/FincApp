@@ -1,6 +1,7 @@
 jupyter
 streamlit
 earthengine-api
+yfinance
 geemap
 plotly
 pandas
