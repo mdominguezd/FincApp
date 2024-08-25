@@ -1,0 +1,13 @@
+jupyter
+streamlit
+earthengine-api
+geemap
+plotly
+pandas
+numpy
+rasterio
+matplotlib
+streamlit-folium
+geopandas
+pycrs
+pillow
