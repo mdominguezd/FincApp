@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import folium
 
 from fincapp.get_weather import get_weather_data
-from fincapp.get_sat_data import add_ndvi_layer, ndvi_time_series
+from fincapp.get_sat_data import add_latest_ndvi_layer, ndvi_time_series, add_mean_ndvi_layer
 from fincapp.get_commodity_price_data import get_sugar_price_data
 from fincapp.get_plot_data import map_plots
 
@@ -18,6 +18,7 @@ from fincapp.get_plot_data import map_plots
 im = Image.open("images/logo.ico")
 
 st.set_page_config(layout="wide",
+                   page_title='FincApp',
                    page_icon = im)
 
 
@@ -54,28 +55,38 @@ dates = st.date_input(
         format="MM.DD.YYYY",
     )
 
-ndvi = st.toggle("Calcular serie de tiempo de NDVI")
+if len(dates) > 1:
 
-col1, col2 = st.columns(2)
+    ndvi = st.toggle("Calcular serie de tiempo de NDVI")
 
-aoi = geemap.shp_to_ee(coordinates_farms[slider_value]).geometry()
+    col1, col2, col3 = st.columns(3)
 
-if ndvi:
+    aoi = geemap.shp_to_ee(coordinates_farms[slider_value]).geometry()
 
-    with col1:
-        st.header('Serie de tiempo de índice de Vegetación (NDVI)')
-        st.plotly_chart(ndvi_time_series(aoi, dates[0].strftime("%Y-%m-%d"), dates[1].strftime("%Y-%m-%d")))
+    if ndvi:
+
+        with col1:
+            st.header('Serie de tiempo de índice de Vegetación (NDVI)')
+            st.plotly_chart(ndvi_time_series(aoi, dates[0].strftime("%Y-%m-%d"), dates[1].strftime("%Y-%m-%d")))
 
 
-    with col2:
-        st.header('Polígonos de la finca')
-        map = map_plots(gdf, coordinates)
+        with col2:
+            st.header('Polígonos de la finca')
+            map = map_plots(gdf, coordinates)
+            st_folium(map, width = '100%', height = 450)
+
+        with col3:
+            st.header('Índice de vegetación promedio')
+            map = add_mean_ndvi_layer(aoi, coordinates, dates[0].strftime("%Y-%m-%d"), dates[1].strftime("%Y-%m-%d"))
+            st_folium(map, width = '100%', height = 450)
+
+    else:
+        st.header('Indice de Vegetación (NDVI) más reciente')
+        map = add_latest_ndvi_layer(aoi, coordinates, dates[0].strftime("%Y-%m-%d"), dates[1].strftime("%Y-%m-%d"))
         st_folium(map, width = '100%', height = 450)
 
 else:
-    st.header('Indice de Vegetación (NDVI) promedio')
-    map = add_ndvi_layer(aoi, coordinates, dates[0].strftime("%Y-%m-%d"), dates[1].strftime("%Y-%m-%d"))
-    st_folium(map, width = '100%', height = 450)
+    st.write('Selecciona fechas a monitorear')
     
     
 fig = get_sugar_price_data()

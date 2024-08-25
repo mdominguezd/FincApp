@@ -66,7 +66,8 @@ def get_cloud_free_images(aoi, start, end):
 
     return filtered_images
 
-def add_ndvi_layer(_aoi, centroid, start, end):
+@st.cache_data()
+def add_latest_ndvi_layer(_aoi, centroid, start, end):
     """
     Generates an NDVI layer for the given GeoDataFrame polygon and displays it on a Folium map.
 
@@ -77,10 +78,58 @@ def add_ndvi_layer(_aoi, centroid, start, end):
     folium.Map: Folium map with the NDVI layer.
     """
     
-    filtered_image_mean = get_cloud_free_images(_aoi, start, end).mean()
+    filtered_images = get_cloud_free_images(_aoi, start, end)
+    latest_image = filtered_images.sort('system:time_start', False).first()
     
     # Calculate NDVI
-    ndvi = filtered_image_mean.normalizedDifference(['B8', 'B4']).rename('NDVI')
+    ndvi = latest_image.normalizedDifference(['B8', 'B4']).rename('NDVI')
+    
+    # Define visualization parameters for NDVI
+    ndvi_params = {
+        'min': -0.75,
+        'max': 0.75,
+        'palette': ['red', 'yellow', 'green']
+    }
+    
+    # Create a map centered at the polygon's centroid
+    m = folium.Map(location=centroid, zoom_start=15)
+    
+    # Get the URL for the NDVI tile layer
+    ndvi_map_id_dict = ee.Image(ndvi).getMapId(ndvi_params)
+    ndvi_tile_url = ndvi_map_id_dict['tile_fetcher'].url_format
+
+    # Add the NDVI layer to the folium map
+    folium.TileLayer(
+        tiles=ndvi_tile_url,
+        attr='Google Earth Engine',
+        name='NDVI',
+        overlay=True,
+        control=True
+    ).add_to(m)
+
+    # Add layer control to toggle the NDVI layer
+    folium.LayerControl().add_to(m)
+
+    # Display the map
+    return m
+
+@st.cache_data()
+def add_mean_ndvi_layer(_aoi, centroid, start, end):
+    """
+    Generates an NDVI layer for the given GeoDataFrame polygon and displays it on a Folium map.
+
+    Args:
+    gdf (geopandas.GeoDataFrame): GeoDataFrame containing a polygon for the area of interest.
+
+    Returns:
+    folium.Map: Folium map with the NDVI layer.
+    """
+    
+    filtered_images = get_cloud_free_images(_aoi, start, end)
+    mean_image = filtered_images.mean()
+    
+    # Calculate NDVI
+    ndvi = mean_image.normalizedDifference(['B8', 'B4']).rename('NDVI')
     
     # Define visualization parameters for NDVI
     ndvi_params = {
