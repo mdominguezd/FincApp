@@ -66,7 +66,6 @@ def get_cloud_free_images(aoi, start, end):
 
     return filtered_images
 
-@st.cache_data
 def add_ndvi_layer(_aoi, centroid, start, end):
     """
     Generates an NDVI layer for the given GeoDataFrame polygon and displays it on a Folium map.
@@ -112,7 +111,6 @@ def add_ndvi_layer(_aoi, centroid, start, end):
     # Display the map
     return m
 
-@st.cache_data()
 def ndvi_time_series(_aoi, start, end):
 
     # Get cloud-free images

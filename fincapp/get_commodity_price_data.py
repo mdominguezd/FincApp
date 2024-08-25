@@ -3,7 +3,6 @@ import datetime
 import plotly.graph_objects as go
 import streamlit as st
 
-@st.cache_data()
 def get_sugar_price_data():
     # Define the ticker symbol for sugar futures
     ticker = "SB=F"
