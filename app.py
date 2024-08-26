@@ -1,23 +1,11 @@
 import streamlit as st
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from streamlit_folium import st_folium
-import geopandas as gpd
-import geemap
+from streamlit_extras.switch_page_button import switch_page 
 from PIL import Image
-from datetime import datetime, timedelta
-import folium
-
-from fincapp.get_weather import get_weather_data
-from fincapp.get_sat_data import add_latest_ndvi_layer, ndvi_time_series, add_mean_ndvi_layer
-from fincapp.get_commodity_price_data import get_sugar_price_data
-from fincapp.get_plot_data import map_plots
-
 
 im = Image.open("images/logo.ico")
 
 st.set_page_config(layout="wide",
+                   initial_sidebar_state="collapsed",
                    page_title='FincApp',
                    page_icon = im)
 
@@ -25,70 +13,49 @@ st.set_page_config(layout="wide",
 # Set the title of the dashboard
 st.title("FincApp :farmer:")
 
-# Add a slider to the sidebar
-slider_value = st.sidebar.selectbox("Finca a monitorear:", 
-                                    ['Montelibano', 'La María', 'Los Remansos'])
+# Custom CSS for the button
+st.markdown("""
+            <style>
+            div[data-testid="column"]
+            {
+                text-align: center;
+            } 
+            </style>
 
-st.markdown(f'# {slider_value}')
+            <style>
+            .stButton button {
+                background-color: #4CAF50; /* Green background */
+                color: white;
+                font-size: 120px;
+                padding: 30px 60px;
+                border-radius: 10px;
+            }
 
-coordinates_farms = {'Montelibano': 'vector/Montelibano.shp',
-                     'La María' : 'vector/LaMaria.shp',
-                     'Los Remansos': 'vector/Remansos.shp'}
+            .stButton button:hover {
+                background-color: #45a049; /* Darker green on hover */
+            }
+            </style>
+""", unsafe_allow_html=True)
 
-gdf = gpd.read_file(coordinates_farms[slider_value]).to_crs(3116)
-gdf['id'] = gdf.index
-
-coordinates = (gdf.dissolve().centroid.to_crs(4236)[0].y, gdf.dissolve().centroid.to_crs(4236)[0].x)
-
-# Show weather metrics
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Temperatura actual", f'{get_weather_data(*coordinates)['temperature']} ºC')
-col2.metric("Precipitación acumulada último día", f'{get_weather_data(*coordinates)['rainfall']} mm')
-col3.metric("Humedad actual", f'{get_weather_data(*coordinates)['humidity']} %')
-
-dates = st.date_input(
-        "Selecciona el periodo de monitoreo",
-        (datetime.today() - timedelta(days=90), datetime.today()),
-        datetime.today() - timedelta(days=6*365),
-        datetime.today(),
-        format="MM.DD.YYYY",
-    )
-
-if len(dates) > 1:
-
-    ndvi = st.toggle("Calcular serie de tiempo de NDVI")
-
-    col1, col2, col3 = st.columns(3)
-
-    aoi = geemap.shp_to_ee(coordinates_farms[slider_value]).geometry()
-
-    if ndvi:
-
-        with col1:
-            st.header('Serie de tiempo de índice de Vegetación (NDVI)')
-            st.plotly_chart(ndvi_time_series(aoi, dates[0].strftime("%Y-%m-%d"), dates[1].strftime("%Y-%m-%d")))
-
-
-        with col2:
-            st.header('Polígonos de la finca')
-            map = map_plots(gdf, coordinates)
-            st_folium(map, width = '100%', height = 450)
-
-        with col3:
-            st.header('Índice de vegetación promedio')
-            map = add_mean_ndvi_layer(aoi, coordinates, dates[0].strftime("%Y-%m-%d"), dates[1].strftime("%Y-%m-%d"))
-            st_folium(map, width = '100%', height = 450)
-
-    else:
-        st.header('Indice de Vegetación (NDVI) más reciente')
-        map = add_latest_ndvi_layer(aoi, coordinates, dates[0].strftime("%Y-%m-%d"), dates[1].strftime("%Y-%m-%d"))
-        st_folium(map, width = '100%', height = 450)
-
-else:
-    st.write('Selecciona fechas a monitorear')
+with col1:
+    montelibano = st.button("Montelibano")
+    st.image('images/Montelibano.png')
     
+    if montelibano:
+        switch_page("Montelibano")
+
+with col2:
+    lamaria = st.button("La Maria")
+    st.image('images/LaMaria.png')
+
+    if lamaria:
+        switch_page("LaMaria")
+
+with col3:
+    remansos = st.button("Remansos")
+    st.image('images/Remansos.png')
     
-fig = get_sugar_price_data()
-st.header('Precio del Azucar')
-st.plotly_chart(fig)
+    if remansos:
+        switch_page("Remansos")

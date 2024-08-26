@@ -4,223 +4,161 @@ import ee
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+import geemap
 
 json_data = st.secrets["json_data"]
 
-# Preparing values
 json_object = json.loads(json_data, strict=False)
 service_account = json_object['client_email']
 json_object = json.dumps(json_object)
-
-# Authorising the app
 credentials = ee.ServiceAccountCredentials(service_account, key_data=json_object)
 ee.Initialize(credentials)
 
+# Retrieve cloud-free satellite images from the Sentinel-2 collection
+@st.cache_data()
 def get_cloud_free_images(aoi, start, end):
-    # Load the S2_SR_HARMONIZED and S2_CLOUD_PROBABILITY image collections
-    s2_sr = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED') \
-            .filterBounds(aoi) \
-            .filterDate(start, end)
+    """
+    Retrieves cloud-free images from the Sentinel-2 collection for a given area and time range.
 
-    s2_cloud_prob = ee.ImageCollection('COPERNICUS/S2_CLOUD_PROBABILITY') \
-                    .filterBounds(aoi) \
-                    .filterDate(start, end) \
-                    .map(lambda image: image.clip(aoi))
-        
-    # Function to add cloud probability band to S2_SR images
+    Args:
+    aoi (ee.Geometry): Area of interest.
+    start (str): Start date for the image collection (format: 'YYYY-MM-DD').
+    end (str): End date for the image collection (format: 'YYYY-MM-DD').
+
+    Returns:
+    ee.ImageCollection: Cloud-free Sentinel-2 images with selected bands.
+    """
+    
+    aoi = geemap.shp_to_ee(aoi).geometry()
+
+    s2_sr = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED').filterBounds(aoi).filterDate(start, end)
+    s2_cloud_prob = ee.ImageCollection('COPERNICUS/S2_CLOUD_PROBABILITY').filterBounds(aoi).filterDate(start, end).map(lambda image: image.clip(aoi))
+
     def add_cloud_prob(image):
-        # Filter cloud probability images based on the 'system:index' property
         cloud_prob = s2_cloud_prob.filter(ee.Filter.equals('system:index', image.get('system:index')))
-
-        # Check if there is at least one cloud probability image
         has_cloud_prob = cloud_prob.size().gt(0)
-        
-        # Define a default cloud probability image with all values set to 100
         default_cloud_prob = ee.Image.constant(100).rename('cloud_prob')
-
-        # If there is a cloud probability image, use it; otherwise, use the default
         cloud_prob_image = ee.Algorithms.If(has_cloud_prob, cloud_prob.first().select('probability').rename('cloud_prob'), default_cloud_prob)
-
-        # Add the cloud probability band to the original image
         image = image.addBands(cloud_prob_image)
-        
         return image
 
-    # Add the cloud probability band to the S2_SR images
     s2_sr_with_cloud = s2_sr.map(add_cloud_prob)
 
-    # Function to compute mean cloud probability within the AOI
     def compute_aoi_cloud_prob(image):
         cloud_prob = image.select('cloud_prob')
         mean_cloud_prob = cloud_prob.reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=10).get('cloud_prob')
         return image.set('mean_cloud_prob', mean_cloud_prob)
 
-    # Compute the mean cloud probability for each image
     s2_sr_with_aoi_cloud_prob = s2_sr_with_cloud.map(compute_aoi_cloud_prob)
-
-    # Filter images based on mean cloud probability within the AOI
-    filtered_images = s2_sr_with_aoi_cloud_prob.filter(ee.Filter.lt('mean_cloud_prob', 5)).map(lambda image: image.clip(aoi)).select(['B8','B4'])
+    filtered_images = s2_sr_with_aoi_cloud_prob.filter(ee.Filter.lt('mean_cloud_prob', 5)).map(lambda image: image.clip(aoi)).select(['B8', 'B4'])
 
     return filtered_images
 
+# Generate an NDVI layer for the latest image and add it to a Folium map
 @st.cache_data()
-def add_latest_ndvi_layer(_aoi, centroid, start, end):
+def add_latest_ndvi_layer(aoi, centroid, start, end):
     """
-    Generates an NDVI layer for the given GeoDataFrame polygon and displays it on a Folium map.
+    Generates and adds an NDVI layer from the latest image to a Folium map.
 
     Args:
-    gdf (geopandas.GeoDataFrame): GeoDataFrame containing a polygon for the area of interest.
+    aoi (ee.Geometry): Area of interest.
+    centroid (list): Coordinates [latitude, longitude] to center the map.
+    start (str): Start date for the image collection (format: 'YYYY-MM-DD').
+    end (str): End date for the image collection (format: 'YYYY-MM-DD').
 
     Returns:
     folium.Map: Folium map with the NDVI layer.
     """
-    
-    filtered_images = get_cloud_free_images(_aoi, start, end)
+    filtered_images = get_cloud_free_images(aoi, start, end)
     latest_image = filtered_images.sort('system:time_start', False).first()
-    
-    # Calculate NDVI
     ndvi = latest_image.normalizedDifference(['B8', 'B4']).rename('NDVI')
-    
-    # Define visualization parameters for NDVI
-    ndvi_params = {
-        'min': -0.75,
-        'max': 0.75,
-        'palette': ['red', 'yellow', 'green']
-    }
-    
-    # Create a map centered at the polygon's centroid
+
+    ndvi_params = {'min': -0.75, 'max': 0.75, 'palette': ['red', 'yellow', 'green']}
     m = folium.Map(location=centroid, zoom_start=15)
-    
-    # Get the URL for the NDVI tile layer
+
     ndvi_map_id_dict = ee.Image(ndvi).getMapId(ndvi_params)
     ndvi_tile_url = ndvi_map_id_dict['tile_fetcher'].url_format
 
-    # Add the NDVI layer to the folium map
-    folium.TileLayer(
-        tiles=ndvi_tile_url,
-        attr='Google Earth Engine',
-        name='NDVI',
-        overlay=True,
-        control=True
-    ).add_to(m)
-
-    # Add layer control to toggle the NDVI layer
+    folium.TileLayer(tiles=ndvi_tile_url, attr='Google Earth Engine', name='NDVI', overlay=True, control=True).add_to(m)
     folium.LayerControl().add_to(m)
 
-    # Display the map
     return m
 
+# Generate an NDVI layer for the mean image and add it to a Folium map
 @st.cache_data()
-def add_mean_ndvi_layer(_aoi, centroid, start, end):
+def add_mean_ndvi_layer(aoi, centroid, start, end):
     """
-    Generates an NDVI layer for the given GeoDataFrame polygon and displays it on a Folium map.
+    Generates and adds an NDVI layer from the mean image to a Folium map.
 
     Args:
-    gdf (geopandas.GeoDataFrame): GeoDataFrame containing a polygon for the area of interest.
+    aoi (ee.Geometry): Area of interest.
+    centroid (list): Coordinates [latitude, longitude] to center the map.
+    start (str): Start date for the image collection (format: 'YYYY-MM-DD').
+    end (str): End date for the image collection (format: 'YYYY-MM-DD').
 
     Returns:
     folium.Map: Folium map with the NDVI layer.
     """
-    
-    filtered_images = get_cloud_free_images(_aoi, start, end)
+    filtered_images = get_cloud_free_images(aoi, start, end)
     mean_image = filtered_images.mean()
-    
-    # Calculate NDVI
     ndvi = mean_image.normalizedDifference(['B8', 'B4']).rename('NDVI')
-    
-    # Define visualization parameters for NDVI
-    ndvi_params = {
-        'min': -0.75,
-        'max': 0.75,
-        'palette': ['red', 'yellow', 'green']
-    }
-    
-    # Create a map centered at the polygon's centroid
+
+    ndvi_params = {'min': -0.75, 'max': 0.75, 'palette': ['red', 'yellow', 'green']}
     m = folium.Map(location=centroid, zoom_start=15)
-    
-    # Get the URL for the NDVI tile layer
+
     ndvi_map_id_dict = ee.Image(ndvi).getMapId(ndvi_params)
     ndvi_tile_url = ndvi_map_id_dict['tile_fetcher'].url_format
 
-    # Add the NDVI layer to the folium map
-    folium.TileLayer(
-        tiles=ndvi_tile_url,
-        attr='Google Earth Engine',
-        name='NDVI',
-        overlay=True,
-        control=True
-    ).add_to(m)
-
-    # Add layer control to toggle the NDVI layer
+    folium.TileLayer(tiles=ndvi_tile_url, attr='Google Earth Engine', name='NDVI', overlay=True, control=True).add_to(m)
     folium.LayerControl().add_to(m)
 
-    # Display the map
     return m
 
-def ndvi_time_series(_aoi, start, end):
+# Generate a time series plot of NDVI for each polygon within the area of interest@st.cache_data()
+@st.cache_data()
+def ndvi_time_series(aoi, start, end):
+    """
+    Generates a time series plot of NDVI for each polygon within the area of interest.
 
-    # Get cloud-free images
-    images = get_cloud_free_images(_aoi, start, end)
+    Args:
+    aoi (ee.Geometry): Area of interest.
+    start (str): Start date for the image collection (format: 'YYYY-MM-DD').
+    end (str): End date for the image collection (format: 'YYYY-MM-DD').
 
-    # Get each individual polygon from the AOI
-    polygons = _aoi.geometries()
-
+    Returns:
+    plotly.graph_objs._figure.Figure: Plotly figure containing the NDVI time series.
+    """
+    images = get_cloud_free_images(aoi, start, end)
+    polygons = geemap.shp_to_ee(aoi).geometry().geometries()
     all_ndvi_results = []
 
-    # Loop through each polygon
     for i in range(polygons.length().getInfo()):
         polygon = ee.Geometry(polygons.get(i))
-        
+
         def get_image_date_and_ndvi(image):
-            # Calculate NDVI
             ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI')
-
-            # Compute the mean NDVI for this specific polygon
-            mean_ndvi = ndvi.reduceRegion(
-                reducer=ee.Reducer.mean(),
-                geometry=polygon,
-                scale=10
-            ).get('NDVI')
-
-            # Get the acquisition date of the image
+            mean_ndvi = ndvi.reduceRegion(reducer=ee.Reducer.mean(), geometry=polygon, scale=10).get('NDVI')
             date = image.date().format('YYYY-MM-dd')
-
-            # Return a dictionary with the date, mean NDVI, and polygon index
             return ee.Feature(None, {'date': date, 'mean_ndvi': mean_ndvi, 'polygon': i})
-        
-        # Get NDVI information for the current polygon
+
         ndvi_info = images.map(get_image_date_and_ndvi).getInfo()['features']
-        
-        # Store results for this polygon
-        ndvi_results = [{'date': f['properties']['date'], 
-                         'mean_ndvi': f['properties']['mean_ndvi'], 
-                         'polygon': f['properties']['polygon']} for f in ndvi_info]
+        ndvi_results = [{'date': f['properties']['date'], 'mean_ndvi': f['properties']['mean_ndvi'], 'polygon': f['properties']['polygon']} for f in ndvi_info]
         all_ndvi_results.extend(ndvi_results)
-    
-    # Convert the list of dictionaries to a Pandas DataFrame
+
     ndvi_df = pd.DataFrame(all_ndvi_results)
-
-    # Generate a rainbow color map based on the number of polygons
     num_polygons = polygons.length().getInfo()
-
-    # Get the rainbow colormap
     cmap = plt.get_cmap('rainbow')
+    colors = [mcolors.rgb2hex(cmap(value)) for value in [i / (num_polygons - 1) for i in range(num_polygons)]]
 
-    # Generate the colors corresponding to the values
-    colors = [mcolors.rgb2hex(cmap(value)) for value in [i/(num_polygons-1) for i in range(num_polygons)]]
-
-
-    # Create a Plotly graph, using 'polygon' to distinguish between different polygons and color them using the rainbow colormap
     fig = px.line(
         ndvi_df,
         x='date',
         y='mean_ndvi',
         color='polygon',
-        title='serie de tiempo de NDVI para cada polígono',
-        labels={'mean_ndvi': 'NDVI promedio', 'date': 'Fecha', 'polygon': 'Polígono'},
+        title='NDVI Time Series for Each Polygon',
+        labels={'mean_ndvi': 'Mean NDVI', 'date': 'Date', 'polygon': 'Polygon'},
         markers=True,
         color_discrete_sequence=colors
     )

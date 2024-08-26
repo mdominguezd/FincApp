@@ -12,3 +12,4 @@ streamlit-folium
 geopandas
 pycrs
 pillow
+streamlit_extras
