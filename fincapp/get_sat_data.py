@@ -150,7 +150,11 @@ def ndvi_time_series(aoi, start, end):
     ndvi_df = pd.DataFrame(all_ndvi_results)
     num_polygons = polygons.length().getInfo()
     cmap = plt.get_cmap('rainbow')
-    colors = [mcolors.rgb2hex(cmap(value)) for value in [i / (num_polygons - 1) for i in range(num_polygons)]]
+
+    if num_polygons > 1:
+        colors = [mcolors.rgb2hex(cmap(value)) for value in [i / (num_polygons - 1) for i in range(num_polygons)]]
+    else:
+        colors = [mcolors.rgb2hex(cmap(value)) for value in [i / (num_polygons) for i in range(num_polygons)]]
 
     fig = px.line(
         ndvi_df,

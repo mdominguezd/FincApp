@@ -37,7 +37,7 @@ st.markdown("""
             </style>
 """, unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
     montelibano = st.button("Montelibano")
@@ -45,17 +45,23 @@ with col1:
     
     if montelibano:
         switch_page("Montelibano")
-
-with col2:
+        
     lamaria = st.button("La Maria")
     st.image('images/LaMaria.png')
 
     if lamaria:
         switch_page("LaMaria")
 
-with col3:
+
+with col2:
+    triangulo = st.button("Triangulo Lucerna")
+    st.image('images/Triangulo.png')
+
+    if triangulo:
+        switch_page("Triangulo")
+
     remansos = st.button("Remansos")
     st.image('images/Remansos.png')
-    
+
     if remansos:
         switch_page("Remansos")

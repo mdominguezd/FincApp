@@ -12,7 +12,11 @@ def map_plots(gdf, coordinates):
     cmap = plt.get_cmap('rainbow')
 
     # Generate the colors corresponding to the values
-    hex_colors = [mcolors.rgb2hex(cmap(value)) for value in [i/(num_polygons-1) for i in range(num_polygons)]]
+    if num_polygons > 1:
+        hex_colors = [mcolors.rgb2hex(cmap(value)) for value in [i / (num_polygons - 1) for i in range(num_polygons)]]
+    else:
+        hex_colors = [mcolors.rgb2hex(cmap(value)) for value in [i / (num_polygons) for i in range(num_polygons)]]
+
 
     # Create a Folium map
     map = folium.Map(location=coordinates, zoom_start=16)

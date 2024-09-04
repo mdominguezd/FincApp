@@ -13,6 +13,7 @@ def render_page(slider_value):
 
     coordinates_farms = {'Montelibano': 'vector/Montelibano.shp',
                         'La María' : 'vector/LaMaria.shp',
+                        'Triangulo' : 'vector/Triangulo.shp',
                         'Los Remansos': 'vector/Remansos.shp'}
 
     gdf = gpd.read_file(coordinates_farms[slider_value]).to_crs(3116)
