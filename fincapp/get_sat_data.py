@@ -14,7 +14,7 @@ json_object = json.loads(json_data, strict=False)
 service_account = json_object['client_email']
 json_object = json.dumps(json_object)
 credentials = ee.ServiceAccountCredentials(service_account, key_data=json_object)
-ee.Initialize(credentials)
+ee.Initialize(credentials, project = 'fincapp-433606')
 
 # Retrieve cloud-free satellite images from the Sentinel-2 collection
 @st.cache_data()
